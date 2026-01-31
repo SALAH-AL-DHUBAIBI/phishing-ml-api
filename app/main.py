@@ -2,42 +2,33 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import joblib
 import numpy as np
-from pathlib import Path
+import os
 
-# ================================
-# إعداد التطبيق
-# ================================
 app = FastAPI(title="Phishing Detection API")
 
-# ================================
-# تحديد مسار مجلد المشروع
-# ================================
-BASE_DIR = Path(__file__).resolve().parent.parent
-MODELS_DIR = BASE_DIR / "app" / "models"
-
-# ================================
-# تحميل النموذج والملفات المساعدة
-# ================================
-model = joblib.load(MODELS_DIR / "random_forest_model_full.pkl")
-scaler = joblib.load(MODELS_DIR / "scaler_full.pkl")
-label_encoder = joblib.load(MODELS_DIR / "label_encoder_full.pkl")
-
-# ================================
-# نموذج الطلب (Request Schema)
-# ================================
+# =========================
+# Request Model
+# =========================
 class PredictionRequest(BaseModel):
-    features: list
+    features: list[float]
 
-# ================================
-# Endpoint فحص حالة الـ API
-# ================================
+# =========================
+# Paths (IMPORTANT)
+# =========================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(BASE_DIR, "models")
+
+model = joblib.load(os.path.join(MODELS_DIR, "random_forest_model_full.pkl"))
+scaler = joblib.load(os.path.join(MODELS_DIR, "scaler_full.pkl"))
+label_encoder = joblib.load(os.path.join(MODELS_DIR, "label_encoder_full.pkl"))
+
+# =========================
+# Routes
+# =========================
 @app.get("/")
 def root():
     return {"status": "API is running successfully"}
 
-# ================================
-# Endpoint التنبؤ
-# ================================
 @app.post("/predict")
 def predict(data: PredictionRequest):
     X = np.array(data.features).reshape(1, -1)
@@ -48,3 +39,10 @@ def predict(data: PredictionRequest):
     return {
         "prediction": label[0]
     }
+
+# =========================
+# Local / Colab Run
+# =========================
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
