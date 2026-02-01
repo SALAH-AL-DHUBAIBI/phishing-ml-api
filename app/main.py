@@ -1,68 +1,74 @@
-# main.py
 from fastapi import FastAPI
 from pydantic import BaseModel
 import joblib
 import pandas as pd
+import numpy as np
 import os
 
-from feature_extractor import AdvancedURLFeatureExtractor
+from feature_extractor import FeatureExtractor
 
-# -------------------------
-# تحميل الملفات
-# -------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = FastAPI(title="Phishing Detection API")
 
-model = joblib.load(os.path.join(BASE_DIR, "random_forest_model_full.pkl"))
-scaler = joblib.load(os.path.join(BASE_DIR, "scaler_full.pkl"))
-label_encoder = joblib.load(os.path.join(BASE_DIR, "label_encoder_full.pkl"))
-
-feature_info = joblib.load(os.path.join(BASE_DIR, "feature_info_full.pkl"))
-selected_features = feature_info["selected_features"]
-
-extractor = AdvancedURLFeatureExtractor()
-
-# -------------------------
-# FastAPI App
-# -------------------------
-app = FastAPI(
-    title="Phishing Detection API",
-    description="ML API for detecting phishing URLs",
-    version="1.0"
-)
-
-# -------------------------
-# Request Model
-# -------------------------
+# ---------- Request Model ----------
 class PredictionRequest(BaseModel):
     url: str
 
-# -------------------------
-# Routes
-# -------------------------
+# ---------- Paths ----------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ---------- Load Artifacts ----------
+model = joblib.load(os.path.join(BASE_DIR, "random_forest_model_full.pkl"))
+scaler = joblib.load(os.path.join(BASE_DIR, "scaler_full.pkl"))
+label_encoder = joblib.load(os.path.join(BASE_DIR, "label_encoder_full.pkl"))
+selected_features = joblib.load(os.path.join(BASE_DIR, "feature_info_full.pkl"))
+
+extractor = FeatureExtractor()
+
+# ---------- Routes ----------
 @app.get("/")
 def root():
-    return {"status": "API is running"}
+    return {"status": "API is running successfully"}
 
 @app.post("/predict")
 def predict(data: PredictionRequest):
+    try:
+        # 1️⃣ Feature Extraction
+        features = extractor.extract(data.url)
 
-    # 1) استخراج الميزات
-    features = extractor.extract(data.url)
+        # 2️⃣ Convert to DataFrame
+        df = pd.DataFrame([features])
 
-    # 2) DataFrame
-    df = pd.DataFrame([features])
+        # 3️⃣ Ensure feature consistency
+        missing_features = set(selected_features) - set(df.columns)
+        if missing_features:
+            return {
+                "error": "Feature mismatch",
+                "missing_features": list(missing_features)
+            }
 
-    # 3) اختيار نفس الميزات التي دُرب عليها النموذج
-    df_selected = df[selected_features]
+        df = df[selected_features]
 
-    # 4) تطبيع
-    X_scaled = scaler.transform(df_selected.values)
+        # 4️⃣ Scaling
+        X_scaled = scaler.transform(df.values)
 
-    # 5) تنبؤ
-    pred = model.predict(X_scaled)
-    label = label_encoder.inverse_transform(pred)
+        # 5️⃣ Prediction
+        prediction = model.predict(X_scaled)
+        probabilities = model.predict_proba(X_scaled)[0]
 
-    return {
-        "url": data.url,
-        "prediction": label[0]
-    }
+        label = label_encoder.inverse_transform(prediction)[0]
+
+        return {
+            "url": data.url,
+            "prediction": label,
+            "confidence": {
+                "legitimate": float(probabilities[0]),
+                "phishing": float(probabilities[1])
+            }
+        }
+
+    except Exception as e:
+        return {
+            "error": "Internal Server Error",
+            "details": str(e),
+            "exception_type": type(e).__name__
+        }
