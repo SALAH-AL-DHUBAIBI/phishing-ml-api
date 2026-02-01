@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import List
 
-class URLRequest(BaseModel):
-    url: str
+class FeaturesRequest(BaseModel):
+    features: List[float]
