@@ -66,4 +66,3 @@ def predict(data: PredictionRequest):
         "url": data.url,
         "prediction": label[0]
     }
-}
