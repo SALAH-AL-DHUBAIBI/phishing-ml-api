@@ -7,6 +7,9 @@ import os
 
 from feature_extractor import FeatureExtractor
 
+print("🔥 NEW VERSION LOADED - URL INPUT 🔥")
+
+
 app = FastAPI(title="Phishing Detection API")
 
 # ---------- Request Model ----------
